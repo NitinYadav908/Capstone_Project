@@ -72,7 +72,8 @@ router.post('/:id/ai-answer', protect, async (req, res) => {
       title: doubt.title,
       description: doubt.description,
       subject: doubt.subject,
-      documents
+      documents,
+      requestToken: req.headers['x-vercel-oidc-token']
     })
 
     const answer = await Answer.create({

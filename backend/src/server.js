@@ -22,10 +22,14 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: 'Unexpected server error.' })
 })
 
-const port = Number(process.env.PORT || 5001)
-connectDB().then(() => {
-  app.listen(port, '127.0.0.1', () => console.log(`PeerConnect API: http://127.0.0.1:${port}`))
-}).catch(error => {
-  console.error('Database connection failed:', error.message)
-  process.exit(1)
-})
+module.exports = app
+
+if (require.main === module) {
+  const port = Number(process.env.PORT || 5001)
+  connectDB().then(() => {
+    app.listen(port, '0.0.0.0', () => console.log(`PeerConnect API running on port ${port}`))
+  }).catch(error => {
+    console.error('Database connection failed:', error.message)
+    process.exit(1)
+  })
+}

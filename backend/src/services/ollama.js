@@ -1,5 +1,4 @@
 async function generateSolution({ title, description, subject, documents = [] }) {
-  const base = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '')
   const model = process.env.OLLAMA_MODEL || 'qwen2.5-coder:latest'
 
   const documentContext = documents.length
@@ -98,29 +97,69 @@ STUDY DOCUMENTS:
 ${documentContext}
 `
 
-  const response = await fetch(`${base}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      format: 'json',
-      options: { temperature: 0.3 }
+
+  const base = (process.env.OLLAMA_URL || '').replace(/\/+$/, '')
+  const bridgeToken = process.env.OLLAMA_BRIDGE_TOKEN
+
+  if (!base || !bridgeToken) {
+    throw new Error('OLLAMA_URL or OLLAMA_BRIDGE_TOKEN is missing.')
+  }
+
+  if (!base.startsWith('https://')) {
+    throw new Error('OLLAMA_URL must use HTTPS.')
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 180000)
+
+  let response
+
+  try {
+    response = await fetch(`${base}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${bridgeToken}`
+      },
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+        format: 'json',
+        options: { temperature: 0.3 }
+      }),
+      signal: controller.signal
     })
-  })
+  } catch (error) {
+    throw new Error(
+      error.name === 'AbortError'
+        ? 'Local Ollama request timed out.'
+        : `Unable to reach local Ollama bridge: ${error.message}`
+    )
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!response.ok) {
-    throw new Error(`Ollama returned HTTP ${response.status}. Check Ollama and the configured model.`)
+    const errorText = await response.text()
+    throw new Error(
+      `Ollama bridge returned HTTP ${response.status}: ${errorText.slice(0, 1000)}`
+    )
   }
 
   const data = await response.json()
+  const generatedText = data.response
+
+  if (!generatedText) {
+    throw new Error('Ollama returned an empty AI response.')
+  }
+
   let parsed
 
   try {
-    parsed = JSON.parse(data.response)
+    parsed = JSON.parse(generatedText)
   } catch {
-    throw new Error('Ollama returned invalid JSON. Try generating the answer again.')
+    throw new Error('Ollama returned invalid JSON. Try generating again.')
   }
 
   const strings = (value, limit, maxLength = 2000) =>

@@ -7,3 +7,5 @@ build/
 .DS_Store
 coverage/
 *.log
+!*.env.example
+node_modules
